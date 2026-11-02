@@ -1,0 +1,17 @@
+﻿# Private credentials - never commit
+.env
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Playwright browser profile - contains login session/cookies, treat like a password
+solinteg_browser_profile/
+
+# Logs
+logs/
+*.log
