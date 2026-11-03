@@ -1,0 +1,21 @@
+services:
+  monitor:
+    image: solinteg-monitor          # use after: docker build -t solinteg-monitor .
+    # OR pull from Docker Hub:
+    # image: YOUR_DOCKERHUB_USERNAME/solinteg-monitor:latest
+    container_name: solinteg-monitor
+    restart: unless-stopped          # auto-restart on crash or reboot
+    env_file:
+      - .env                         # credentials and settings loaded from .env
+    volumes:
+      - browser_profile:/app/solinteg_browser_profile   # persist login session
+      - ./logs:/app/logs                                 # persist log files on host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  browser_profile:
+
