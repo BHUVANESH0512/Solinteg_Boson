@@ -298,6 +298,14 @@ def main() -> None:
             user_data_dir=str(PROFILE_DIR),
             headless=HEADLESS,
             viewport={"width": 1440, "height": 900},
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                "--single-process",
+            ] if HEADLESS else [],
         )
         try:
             page = context.pages[0] if context.pages else context.new_page()
