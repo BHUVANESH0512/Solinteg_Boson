@@ -1,0 +1,18 @@
+# fly.toml app configuration file for Solinteg Battery SOC Monitor
+# Documentation: https://fly.io/docs/reference/configuration/
+
+app = "solinteg-battery-monitor"
+primary_region = "sin" # Singapore (low latency to India), or choose maa/bom if available
+
+[build]
+  dockerfile = "Dockerfile"
+
+# This is a background worker process, not an HTTP web server.
+# No [[services]] or [http_service] block here ensures Fly.io
+# does NOT auto-suspend or stop the machine.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb" # Chromium requires at least 512MB-1GB to run comfortably
+  cpus = 1
+

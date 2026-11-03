@@ -31,7 +31,8 @@ PASSWORD_SELECTOR  = os.getenv("LOGIN_PASSWORD_SELECTOR", "").strip()
 LOGIN_BTN_SELECTOR = os.getenv("LOGIN_BUTTON_SELECTOR", "").strip()
 
 # -- Email settings -----------------------------------------------------------
-ALERT_TO_EMAIL     = os.getenv("ALERT_TO_EMAIL", "")
+ALERT_TO_EMAIL_RAW = os.getenv("ALERT_TO_EMAIL", "")
+ALERT_TO_EMAILS    = [e.strip() for e in ALERT_TO_EMAIL_RAW.split(",") if e.strip()]
 GMAIL_FROM_EMAIL   = os.getenv("GMAIL_FROM_EMAIL", "")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 
@@ -104,7 +105,7 @@ def send_email_alert(soc: float, site: dict) -> None:
     if not GMAIL_FROM_EMAIL or not GMAIL_APP_PASSWORD:
         log("Email not configured (GMAIL_FROM_EMAIL / GMAIL_APP_PASSWORD blank). Skipping.", site["name"])
         return
-    if not ALERT_TO_EMAIL:
+    if not ALERT_TO_EMAILS:
         log("ALERT_TO_EMAIL is blank. Skipping email.", site["name"])
         return
 
@@ -186,9 +187,10 @@ def send_email_alert(soc: float, site: dict) -> None:
     )
 
     try:
+        to_header = ", ".join(ALERT_TO_EMAILS)
         msg = EmailMessage()
         msg["From"]    = GMAIL_FROM_EMAIL
-        msg["To"]      = ALERT_TO_EMAIL
+        msg["To"]      = to_header
         msg["Subject"] = subject
         msg.set_content(plain, charset="utf-8")
         msg.add_alternative(html, subtype="html", charset="utf-8")
@@ -198,7 +200,7 @@ def send_email_alert(soc: float, site: dict) -> None:
             server.login(GMAIL_FROM_EMAIL, GMAIL_APP_PASSWORD)
             server.send_message(msg)
 
-        log(f"Email alert sent to {ALERT_TO_EMAIL}.", site["name"])
+        log(f"Email alert sent to {to_header}.", site["name"])
     except Exception as e:
         log(f"Failed to send email: {e}", site["name"])
 
@@ -289,7 +291,7 @@ def main() -> None:
         f" | refresh every {RELOAD_INTERVAL}s | headless={HEADLESS}")
     for s in sites:
         log(f"  Site: {s['name']} | threshold: {s['threshold']}%")
-    log(f"Alert email -> {ALERT_TO_EMAIL}")
+    log(f"Alert email -> {', '.join(ALERT_TO_EMAILS)}")
 
     with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
