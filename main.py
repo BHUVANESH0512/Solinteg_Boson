@@ -274,6 +274,21 @@ def try_automatic_login(page) -> bool:
         p_box.fill("")
         p_box.press_sequentially(PASSWORD, delay=50)
 
+        # Check terms and agreement checkbox if present and not already checked
+        try:
+            # Matches Ant Design checkbox or label containing "I agree" / "agreement"
+            agreement_cb = page.locator("input[type='checkbox']").last
+            if agreement_cb.is_visible() and not agreement_cb.is_checked():
+                agreement_cb.check(force=True)
+                log("Checked user agreement terms checkbox.")
+        except Exception as e:
+            try:
+                # Fallback: click the text label itself
+                page.locator("text=/agree|agreement/i").first.click(timeout=2000)
+                log("Clicked agreement label.")
+            except Exception:
+                pass
+
         page.locator(LOGIN_BTN_SELECTOR).click(timeout=5000)
         log("Submitted login form. Waiting for authentication and redirect...")
 
