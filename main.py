@@ -242,6 +242,7 @@ def ensure_site(page, site: dict) -> bool:
 
     log("Dashboard not visible - session may have expired.", site["name"])
     if try_automatic_login(page):
+        page.wait_for_timeout(3000)
         page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
         if soc_visible(page, timeout=20000):
             return True
