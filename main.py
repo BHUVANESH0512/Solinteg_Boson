@@ -3,6 +3,8 @@ import re
 import time
 import smtplib
 import ssl
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
@@ -45,6 +47,39 @@ Path("logs").mkdir(exist_ok=True)
 BATTERY_PATTERN = re.compile(
     r"\bBattery\b[\s:]*([0-9]{1,3}(?:\.[0-9]+)?)\s*%", re.IGNORECASE
 )
+
+
+# -- Background Health Server for Cloud / Fly.io on Port 8080 -----------------
+LATEST_STATUS = {"status": "starting", "time": "none", "sites": {}}
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        html = f"""<html><head><title>Solinteg Battery Monitor</title></head>
+        <body style='font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px;background:#f8f9fa;'>
+        <h2>Solinteg Battery Monitor Status</h2>
+        <p><b>Status:</b> {LATEST_STATUS.get('status', 'running')}</p>
+        <p><b>Last Update:</b> {LATEST_STATUS.get('time', 'waiting...')}</p>
+        <h3>Monitored Sites:</h3><ul>"""
+        for sname, sdata in LATEST_STATUS.get("sites", {}).items():
+            html += f"<li><b>{sname}:</b> SOC {sdata.get('soc', 'N/A')}% (Updated: {sdata.get('time')})</li>"
+        html += "</ul></body></html>"
+        self.wfile.write(html.encode("utf-8"))
+
+    def log_message(self, format, *args):
+        pass # Suppress noisy HTTP access logs in console
+
+def start_health_server():
+    port = int(os.getenv("PORT", "8080"))
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        print(f"Health status server listening on port {port}", flush=True)
+    except Exception as e:
+        print(f"Health server note: {e}", flush=True)
 
 
 # -- Load sites from .env (SITE_1_*, SITE_2_*, ...) ---------------------------
@@ -283,6 +318,7 @@ def check_threshold(soc: float, site: dict) -> None:
 
 # -- Main ---------------------------------------------------------------------
 def main() -> None:
+    start_health_server()
     sites = load_sites()
     if not sites:
         print("ERROR: No sites configured. Add SITE_1_URL to .env and restart.")
@@ -341,6 +377,10 @@ def main() -> None:
 
                         soc = extract_battery_soc(page)
                         log(f"Battery SOC: {soc:.1f}%", site["name"])
+                        now_h = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        LATEST_STATUS["status"] = "monitoring"
+                        LATEST_STATUS["time"] = now_h
+                        LATEST_STATUS["sites"][site["name"]] = {"soc": f"{soc:.1f}", "time": now_h}
                         check_threshold(soc, site)
                         site["failures"] = 0
 
