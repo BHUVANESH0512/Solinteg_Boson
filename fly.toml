@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for solinteg-boson-cto-ew on 2026-11-04T04:29:54Z
+# fly.toml app configuration file generated for solinteg-boson-lommmg on 2026-11-04T05:40:25Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'solinteg-boson-cto-ew'
+app = 'solinteg-boson-lommmg'
 primary_region = 'ams'
 
 [build]
