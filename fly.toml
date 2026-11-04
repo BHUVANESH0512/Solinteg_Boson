@@ -1,19 +1,25 @@
-# fly.toml app configuration file for Solinteg Battery SOC Monitor
-# Documentation: https://fly.io/docs/reference/configuration/
+# fly.toml app configuration file generated for solinteg-boson-cto-ew on 2026-11-04T04:29:54Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = 'solinteg-boson-ufo5iw'
+app = 'solinteg-boson-cto-ew'
 primary_region = 'ams'
 
 [build]
   dockerfile = 'Dockerfile'
 
-# NOTE: NO [http_service] block!
-# Because this is a 24/7 background worker (not a website),
-# removing [http_service] prevents Fly.io from trying to route web traffic 
-# or automatically stopping/sleeping the machine.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
   size = 'shared-cpu-1x'
   memory = '1024mb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 1024
