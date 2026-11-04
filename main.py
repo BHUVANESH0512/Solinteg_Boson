@@ -261,9 +261,18 @@ def try_automatic_login(page) -> bool:
         log("Username or password env variable is missing.")
         return False
     try:
-        log(f"Current page before login: {page.url}")
-        
-        # Click and use press_sequentially so Ant Design React state registers keystrokes
+        # If we are not on the login page, navigate to the login page first!
+        if "/login" not in page.url and not page.locator(USERNAME_SELECTOR).is_visible():
+            log(f"Navigating to login page. Current was: {page.url}")
+            page.goto("https://www.solinteg-cloud.com/login", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2000)
+
+        # Ensure the username box is actually present before trying to click it
+        if not page.locator(USERNAME_SELECTOR).is_visible():
+            log(f"Login input {USERNAME_SELECTOR} not visible on page: {page.url}")
+            return False
+
+        log("Entering login credentials...")
         u_box = page.locator(USERNAME_SELECTOR)
         u_box.click()
         u_box.fill("")
@@ -276,14 +285,12 @@ def try_automatic_login(page) -> bool:
 
         # Check terms and agreement checkbox if present and not already checked
         try:
-            # Matches Ant Design checkbox or label containing "I agree" / "agreement"
             agreement_cb = page.locator("input[type='checkbox']").last
             if agreement_cb.is_visible() and not agreement_cb.is_checked():
                 agreement_cb.check(force=True)
                 log("Checked user agreement terms checkbox.")
-        except Exception as e:
+        except Exception:
             try:
-                # Fallback: click the text label itself
                 page.locator("text=/agree|agreement/i").first.click(timeout=2000)
                 log("Clicked agreement label.")
             except Exception:
@@ -298,7 +305,6 @@ def try_automatic_login(page) -> bool:
             log(f"Login successful! Redirected to: {page.url}")
             return True
         except Exception:
-            # If still on login page, capture visible error text on the page!
             current_url = page.url
             body_snippet = page.locator("body").inner_text()[:400].replace("\n", " ")
             log(f"Login did not redirect! Still at: {current_url} | Visible text: {body_snippet}")
@@ -310,22 +316,34 @@ def try_automatic_login(page) -> bool:
 
 def ensure_site(page, site: dict) -> bool:
     """Navigate to a site dashboard; re-login if session expired."""
-    page.goto(site["url"], wait_until="networkidle", timeout=60000)
-    if soc_visible(page, timeout=15000):
+    page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
+
+    # 1. Give the live page up to 25s to populate battery data via WebSockets
+    if soc_visible(page, timeout=25000):
         return True
 
-    log("Dashboard not visible - checking login...", site["name"])
-    if try_automatic_login(page):
-        # Now navigate directly to the target plant dashboard with session active
-        page.goto(site["url"], wait_until="networkidle", timeout=60000)
+    # 2. Check if we were actually kicked back to the login page
+    is_on_login = "/login" in page.url or page.locator(USERNAME_SELECTOR).is_visible()
+
+    if is_on_login:
+        log("Redirected to login page. Attempting automatic login...", site["name"])
+        if try_automatic_login(page):
+            page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
+            if soc_visible(page, timeout=30000):
+                return True
+    else:
+        # We are on the detail page, but data took too long to load. Refresh once.
+        log("On detail page but SOC numbers not yet loaded. Refreshing...", site["name"])
+        page.reload(wait_until="networkidle", timeout=60000)
         if soc_visible(page, timeout=30000):
             return True
 
     if HEADLESS:
-        log("Headless mode - retrying navigation after brief pause...", site["name"])
-        page.wait_for_timeout(5000)
-        page.goto(site["url"], wait_until="networkidle", timeout=60000)
-        return soc_visible(page, timeout=30000)
+        log("Headless mode - retrying login and navigation...", site["name"])
+        if try_automatic_login(page):
+            page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
+            return soc_visible(page, timeout=30000)
+        return False
 
     log("Please log in manually in the browser window (waiting up to 5 min)...", site["name"])
     return soc_visible(page, timeout=300000)
