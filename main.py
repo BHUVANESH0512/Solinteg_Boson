@@ -255,22 +255,41 @@ def soc_visible(page, timeout=15000) -> bool:
 
 def try_automatic_login(page) -> bool:
     if not all([USERNAME_SELECTOR, PASSWORD_SELECTOR, LOGIN_BTN_SELECTOR]):
+        log("Automatic login selectors not fully configured.")
         return False
     if not USERNAME or not PASSWORD:
+        log("Username or password env variable is missing.")
         return False
     try:
-        page.locator(USERNAME_SELECTOR).fill(USERNAME, timeout=5000)
-        page.locator(PASSWORD_SELECTOR).fill(PASSWORD, timeout=5000)
+        log(f"Current page before login: {page.url}")
+        
+        # Click and use press_sequentially so Ant Design React state registers keystrokes
+        u_box = page.locator(USERNAME_SELECTOR)
+        u_box.click()
+        u_box.fill("")
+        u_box.press_sequentially(USERNAME, delay=50)
+
+        p_box = page.locator(PASSWORD_SELECTOR)
+        p_box.click()
+        p_box.fill("")
+        p_box.press_sequentially(PASSWORD, delay=50)
+
         page.locator(LOGIN_BTN_SELECTOR).click(timeout=5000)
         log("Submitted login form. Waiting for authentication and redirect...")
-        # Wait up to 15s for the URL to leave the login page
+
+        # Wait up to 15s for the URL to leave /login
         try:
             page.wait_for_url(lambda u: "/login" not in u, timeout=15000)
+            log(f"Login successful! Redirected to: {page.url}")
+            return True
         except Exception:
-            page.wait_for_timeout(5000)
-        return True
-    except PlaywrightTimeoutError:
-        log("Login selectors not found on this page.")
+            # If still on login page, capture visible error text on the page!
+            current_url = page.url
+            body_snippet = page.locator("body").inner_text()[:400].replace("\n", " ")
+            log(f"Login did not redirect! Still at: {current_url} | Visible text: {body_snippet}")
+            return False
+    except Exception as e:
+        log(f"Login error: {e}")
         return False
 
 
