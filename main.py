@@ -262,7 +262,12 @@ def try_automatic_login(page) -> bool:
         page.locator(USERNAME_SELECTOR).fill(USERNAME, timeout=5000)
         page.locator(PASSWORD_SELECTOR).fill(PASSWORD, timeout=5000)
         page.locator(LOGIN_BTN_SELECTOR).click(timeout=5000)
-        log("Submitted login form.")
+        log("Submitted login form. Waiting for authentication and redirect...")
+        # Wait up to 15s for the URL to leave the login page
+        try:
+            page.wait_for_url(lambda u: "/login" not in u, timeout=15000)
+        except Exception:
+            page.wait_for_timeout(5000)
         return True
     except PlaywrightTimeoutError:
         log("Login selectors not found on this page.")
@@ -271,20 +276,22 @@ def try_automatic_login(page) -> bool:
 
 def ensure_site(page, site: dict) -> bool:
     """Navigate to a site dashboard; re-login if session expired."""
-    page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
-    if soc_visible(page, timeout=10000):
+    page.goto(site["url"], wait_until="networkidle", timeout=60000)
+    if soc_visible(page, timeout=15000):
         return True
 
-    log("Dashboard not visible - session may have expired.", site["name"])
+    log("Dashboard not visible - checking login...", site["name"])
     if try_automatic_login(page):
-        page.wait_for_timeout(3000)
-        page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
-        if soc_visible(page, timeout=20000):
+        # Now navigate directly to the target plant dashboard with session active
+        page.goto(site["url"], wait_until="networkidle", timeout=60000)
+        if soc_visible(page, timeout=30000):
             return True
 
     if HEADLESS:
-        log("Running headless - cannot prompt for manual login. Retrying later.", site["name"])
-        return False
+        log("Headless mode - retrying navigation after brief pause...", site["name"])
+        page.wait_for_timeout(5000)
+        page.goto(site["url"], wait_until="networkidle", timeout=60000)
+        return soc_visible(page, timeout=30000)
 
     log("Please log in manually in the browser window (waiting up to 5 min)...", site["name"])
     return soc_visible(page, timeout=300000)
