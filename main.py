@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 import time
 import smtplib
@@ -28,9 +28,9 @@ HEADLESS             = os.getenv("HEADLESS", "false").lower() == "true"
 # -- Login selectors (shared across all sites, same Solinteg account) ---------
 USERNAME           = os.getenv("SOLINTEG_USERNAME", "")
 PASSWORD           = os.getenv("SOLINTEG_PASSWORD", "")
-USERNAME_SELECTOR  = os.getenv("LOGIN_USERNAME_SELECTOR", "").strip()
-PASSWORD_SELECTOR  = os.getenv("LOGIN_PASSWORD_SELECTOR", "").strip()
-LOGIN_BTN_SELECTOR = os.getenv("LOGIN_BUTTON_SELECTOR", "").strip()
+USERNAME_SELECTOR  = os.getenv("LOGIN_USERNAME_SELECTOR", "#basic_account").strip() or "#basic_account"
+PASSWORD_SELECTOR  = os.getenv("LOGIN_PASSWORD_SELECTOR", "#basic_pwd").strip() or "#basic_pwd"
+LOGIN_BTN_SELECTOR = os.getenv("LOGIN_BUTTON_SELECTOR", "button[type='submit']").strip() or "button[type='submit']"
 
 # -- Email settings -----------------------------------------------------------
 ALERT_TO_EMAIL_RAW = os.getenv("ALERT_TO_EMAIL", "")
