@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import time
 import smtplib
@@ -463,7 +463,5 @@ def main() -> None:
             log("Stopped by user.")
         finally:
             context.close()
-
-
 if __name__ == "__main__":
     main()
