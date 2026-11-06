@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import time
 import smtplib
@@ -261,9 +261,18 @@ def try_automatic_login(page) -> bool:
         log("Username or password env variable is missing.")
         return False
     try:
-        log(f"Current page before login: {page.url}")
-        
-        # Click and use press_sequentially so Ant Design React state registers keystrokes
+        # If we are not on the login page, navigate to the login page first!
+        if "/login" not in page.url and not page.locator(USERNAME_SELECTOR).is_visible():
+            log(f"Navigating to login page. Current was: {page.url}")
+            page.goto("https://www.solinteg-cloud.com/login", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2000)
+
+        # Ensure the username box is actually present before trying to click it
+        if not page.locator(USERNAME_SELECTOR).is_visible():
+            log(f"Login input {USERNAME_SELECTOR} not visible on page: {page.url}")
+            return False
+
+        log("Entering login credentials...")
         u_box = page.locator(USERNAME_SELECTOR)
         u_box.click()
         u_box.fill("")
@@ -276,14 +285,12 @@ def try_automatic_login(page) -> bool:
 
         # Check terms and agreement checkbox if present and not already checked
         try:
-            # Matches Ant Design checkbox or label containing "I agree" / "agreement"
             agreement_cb = page.locator("input[type='checkbox']").last
             if agreement_cb.is_visible() and not agreement_cb.is_checked():
                 agreement_cb.check(force=True)
                 log("Checked user agreement terms checkbox.")
-        except Exception as e:
+        except Exception:
             try:
-                # Fallback: click the text label itself
                 page.locator("text=/agree|agreement/i").first.click(timeout=2000)
                 log("Clicked agreement label.")
             except Exception:
@@ -298,7 +305,6 @@ def try_automatic_login(page) -> bool:
             log(f"Login successful! Redirected to: {page.url}")
             return True
         except Exception:
-            # If still on login page, capture visible error text on the page!
             current_url = page.url
             body_snippet = page.locator("body").inner_text()[:400].replace("\n", " ")
             log(f"Login did not redirect! Still at: {current_url} | Visible text: {body_snippet}")
@@ -310,25 +316,28 @@ def try_automatic_login(page) -> bool:
 
 def ensure_site(page, site: dict) -> bool:
     """Navigate to a site dashboard; re-login if session expired."""
-    page.goto(site["url"], wait_until="networkidle", timeout=60000)
-    if soc_visible(page, timeout=15000):
+    # 1. If currently on login page or not logged in, perform login first
+    if "/login" in page.url or page.locator(USERNAME_SELECTOR).is_visible():
+        log("On login page. Performing login first...", site["name"])
+        try_automatic_login(page)
+
+    # 2. Navigate to target site dashboard
+    page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
+
+    # 3. If Solinteg redirected us to /login, log in and reload dashboard
+    if "/login" in page.url or page.locator(USERNAME_SELECTOR).is_visible():
+        log("Redirected to login. Logging in...", site["name"])
+        if try_automatic_login(page):
+            page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
+
+    # 4. Wait up to 35s for live battery data to populate
+    if soc_visible(page, timeout=35000):
         return True
 
-    log("Dashboard not visible - checking login...", site["name"])
-    if try_automatic_login(page):
-        # Now navigate directly to the target plant dashboard with session active
-        page.goto(site["url"], wait_until="networkidle", timeout=60000)
-        if soc_visible(page, timeout=30000):
-            return True
-
-    if HEADLESS:
-        log("Headless mode - retrying navigation after brief pause...", site["name"])
-        page.wait_for_timeout(5000)
-        page.goto(site["url"], wait_until="networkidle", timeout=60000)
-        return soc_visible(page, timeout=30000)
-
-    log("Please log in manually in the browser window (waiting up to 5 min)...", site["name"])
-    return soc_visible(page, timeout=300000)
+    # 5. If data didn't appear, try one refresh with 35s wait
+    log("SOC not visible yet. Reloading dashboard...", site["name"])
+    page.reload(wait_until="domcontentloaded", timeout=60000)
+    return soc_visible(page, timeout=35000)
 
 
 def extract_battery_soc(page) -> float:
@@ -388,10 +397,21 @@ def main() -> None:
         try:
             page = context.pages[0] if context.pages else context.new_page()
 
-            # Initial load - establish login session
-            if not ensure_site(page, sites[0]):
-                log("Could not open the first dashboard. Exiting.")
-                return
+            # Initial load: perform login directly first!
+            log("Opening Solinteg to verify/perform login first...")
+            page.goto("https://www.solinteg-cloud.com/login", wait_until="domcontentloaded", timeout=60000)
+            if "/login" in page.url or page.locator(USERNAME_SELECTOR).is_visible():
+                try_automatic_login(page)
+
+            # Establish session and verify first site
+            initial_attempts = 0
+            while not ensure_site(page, sites[0]):
+                initial_attempts += 1
+                log(f"Initial connection to {sites[0]['name']} failed (attempt {initial_attempts}). Retrying in 15s...")
+                time.sleep(15)
+                if initial_attempts >= 5:
+                    log("Warning: Could not read first site immediately, but continuing to main monitoring loop.")
+                    break
 
             # Initialise reload timers
             now = time.monotonic()
@@ -413,8 +433,12 @@ def main() -> None:
                             site["last_reload"] = time.monotonic()
                         else:
                             page.goto(site["url"], wait_until="domcontentloaded", timeout=60000)
-                            if not soc_visible(page, timeout=10000):
-                                raise RuntimeError("SOC not visible after navigation.")
+                            if not soc_visible(page, timeout=30000):
+                                # If session dropped mid-loop, re-login
+                                if "/login" in page.url or page.locator(USERNAME_SELECTOR).is_visible():
+                                    ensure_site(page, site)
+                                else:
+                                    raise RuntimeError("SOC not visible after navigation.")
 
                         soc = extract_battery_soc(page)
                         log(f"Battery SOC: {soc:.1f}%", site["name"])
@@ -445,7 +469,5 @@ def main() -> None:
             log("Stopped by user.")
         finally:
             context.close()
-
-
 if __name__ == "__main__":
     main()
